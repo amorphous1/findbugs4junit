@@ -7,8 +7,8 @@ import java.util.List;
 import org.eclipse.jgit.api.BlameCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.blame.BlameResult;
-import org.eclipse.jgit.lib.AnyObjectId;
 import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.revwalk.RevCommit;
 import org.joda.time.DateTime;
 
 import com.youdevise.fbplugins.junit.CommittedCodeDetailsFetcher;
@@ -29,14 +29,10 @@ public class GitCommittedCodeDetailsFetcher implements CommittedCodeDetailsFetch
             BlameResult blameResult = new BlameCommand(gitRepo).setFilePath(relativePathToGitControlledFile).call();
 
             for (int lineIndex = 0; ; lineIndex++) {
-                int commitTimeInSecondsSinceEpoch = blameResult.getSourceCommit(lineIndex).getCommitTime();
-                DateTime dateOfCommit = new DateTime(1000L * commitTimeInSecondsSinceEpoch);
-                String revision = blameResult.getSourceCommit(lineIndex).getId().name();
-                String author = blameResult.getSourceAuthor(lineIndex).getName();
-                String lineContents = blameResult.getResultContents().getString(lineIndex);
-                int lineNumber = blameResult.getSourceLine(lineIndex);
-
-                linesOfCode.add(new LineOfCommittedCode(dateOfCommit, revision, author, lineContents, lineNumber));
+                RevCommit sourceCommit = blameResult.getSourceCommit(lineIndex);
+                if (sourceCommit != null) {
+                    linesOfCode.add(lineOfCommitedCodeFor(blameResult, sourceCommit, lineIndex));
+                }
             }
         } catch (ArrayIndexOutOfBoundsException e) {
             ; // BlameResult does not seem to expose the number of available indexes, so we have to use this to end the for loop :-(
@@ -45,5 +41,16 @@ public class GitCommittedCodeDetailsFetcher implements CommittedCodeDetailsFetch
             return Collections.emptyList();
         }
         return linesOfCode;
+    }
+
+    private LineOfCommittedCode lineOfCommitedCodeFor(BlameResult blameResult, RevCommit sourceCommit, int lineIndex) {
+        int commitTimeInSecondsSinceEpoch = sourceCommit.getCommitTime();
+        DateTime dateOfCommit = new DateTime(1000L * commitTimeInSecondsSinceEpoch);
+        String revision = sourceCommit.getId().name();
+        String author = blameResult.getSourceAuthor(lineIndex).getName();
+        String lineContents = blameResult.getResultContents().getString(lineIndex);
+        int lineNumber = blameResult.getSourceLine(lineIndex);
+        
+        return new LineOfCommittedCode(dateOfCommit, revision, author, lineContents, lineNumber);
     }
 }
